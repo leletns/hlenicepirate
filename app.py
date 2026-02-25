@@ -1,5 +1,5 @@
 from flask import Flask, request, send_file, render_template_string
-import fitz  # Este é o PyMuPDF
+from pypdf import PdfReader, PdfWriter
 import io
 
 app = Flask(__name__)
@@ -60,20 +60,20 @@ def desbloquear():
         return render_template_string(HTML_TEMPLATE, erro="Selecione um arquivo PDF válido.")
 
     try:
-        # Lê o arquivo em memória
-        file_bytes = file.read()
+        reader = PdfReader(file)
         
-        # Abre com o motor de alta performance (fitz)
-        doc = fitz.open(stream=file_bytes, filetype="pdf")
-        
-        # Verifica se tem senha e tenta quebrar
-        if doc.needs_pass:
-            if not doc.authenticate(senha):
+        if reader.is_encrypted:
+            # Com a biblioteca cryptography instalada, ele quebra AES-256 sorrindo
+            sucesso = reader.decrypt(senha)
+            if sucesso == 0:
                 return render_template_string(HTML_TEMPLATE, erro="Senha incorreta. Verifique os dados com a paciente.")
 
-        # Salva o arquivo limpo na memória RAM
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+
         pdf_liberado = io.BytesIO()
-        doc.save(pdf_liberado)
+        writer.write(pdf_liberado)
         pdf_liberado.seek(0)
         
         return send_file(
@@ -84,7 +84,7 @@ def desbloquear():
         )
 
     except Exception as e:
-        return render_template_string(HTML_TEMPLATE, erro="Falha ao processar o arquivo. A criptografia deste exame pode ser incompatível.")
+        return render_template_string(HTML_TEMPLATE, erro=f"Falha ao processar o arquivo: {str(e)}")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
